@@ -5,28 +5,62 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                header
-                triggerButton
-                statusCard
-                logSection
+            ZStack {
+                // Soft, adaptive background
+                Color(UIColor.systemGroupedBackground).ignoresSafeArea()
+
+                VStack(spacing: 24) {
+                    header
+                    statusCard
+                    triggerButton
+                    logSection
+                }
+                .padding(20)
             }
-            .padding()
             .navigationTitle("MConfPoC")
             .navigationBarTitleDisplayMode(.inline)
         }
+        .preferredColorScheme(.dark) // Keeping dark mode, but softer
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("CVE-2026-112706")
-                .font(.headline)
-                .foregroundStyle(.orange)
-            Text("CoreMedia File-Descriptor Leak PoC")
-                .font(.caption)
+                .font(.system(.title3, design: .rounded).weight(.bold))
+                .foregroundStyle(.primary)
+            Text("CoreMedia File-Descriptor Leak")
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var statusCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Current File Descriptors")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(vm.fdCount)")
+                    .font(.system(size: 56, weight: .bold, design: .rounded))
+                    .foregroundStyle(vm.fdCount > vm.initialFD ? .red : .primary)
+                    .contentTransition(.numericText())
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text("Baseline: \(vm.initialFD)")
+                    Text("Delta: +\(max(0, vm.fdCount - vm.initialFD))")
+                        .foregroundStyle(vm.fdCount > vm.initialFD ? .red : .green)
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(20)
+        .background(Color(UIColor.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private var triggerButton: some View {
@@ -36,45 +70,29 @@ struct ContentView: View {
                 Text(vm.isRunning ? "Running…" : "Run PoC")
                     .fontWeight(.semibold)
             }
+            .font(.headline)
             .frame(maxWidth: .infinity)
-            .padding()
-            .background(vm.isRunning ? Color.gray : Color.orange)
-            .foregroundStyle(.black)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 16)
+            .background(vm.isRunning ? Color.gray.opacity(0.3) : Color.orange)
+            .foregroundStyle(vm.isRunning ? .secondary : .black)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .disabled(vm.isRunning)
-    }
-
-    private var statusCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("File Descriptors").font(.caption).foregroundStyle(.secondary)
-            HStack {
-                Text("\(vm.fdCount)")
-                    .font(.system(size: 48, weight: .bold, design: .monospaced))
-                    .foregroundStyle(vm.fdCount > vm.initialFD ? .red : .green)
-                Spacer()
-                VStack(alignment: .trailing) {
-                    Text("baseline: \(vm.initialFD)").font(.caption2)
-                    Text("delta: +\(max(0, vm.fdCount - vm.initialFD))")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                }
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .animation(.easeInOut, value: vm.isRunning)
     }
 
     private var logSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Log").font(.caption).foregroundStyle(.secondary)
+                Text("Activity Log")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 Spacer()
                 Button("Clear") { vm.clearLogs() }
-                    .font(.caption2)
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(.red)
             }
+            
             LogView(entries: vm.logs)
                 .frame(maxHeight: .infinity)
         }
