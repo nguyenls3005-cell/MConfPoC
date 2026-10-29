@@ -29,29 +29,41 @@ final class PoCViewModel: ObservableObject {
         isRunning = true
         log("Starting \(iterations) iterations…")
 
-        Task {
+        // Detach so the heavy blocking IO doesn't freeze the Main Actor
+        Task.detached { [weak self] in
+            guard let self = self else { return }
+            
             do {
-                let result = try await poc.run(iterations: iterations) { [weak self] done, fds in
-                    Task { @MainActor in
-                        guard let self else { return }
+                let result = try await self.poc.run(iterations: self.iterations) { done, fds in
+                    Task { @MainActor [weak self] in
+                        guard let self = self else { return }
                         self.fdCount = fds
                         if done % 10 == 0 || done == self.iterations {
                             self.log("iter \(done)/\(self.iterations) — FDs: \(fds)")
                         }
                     }
                 }
-                self.initialFD = result.baseline
-                self.fdCount = result.final
-                let delta = result.final - result.baseline
-                log(delta > 0
-                    ? "⚠️ FD leak detected: +\(delta)"
-                    : "✅ No leak. delta: \(delta)")
+                
+                await MainActor.run {
+                    self.initialFD = result.baseline
+                    self.fdCount = result.final
+                    let delta = result.final - result.baseline
+                    self.log(delta > 0
+                        ? "⚠️ FD leak detected: +\(delta)"
+                        : "✅ No leak. delta: \(delta)")
+                    self.isRunning = false
+                }
             } catch CoreMediaPoC.PoCError.noSampleFile {
-                log("❌ sample.mov missing from bundle — drop one into Resources/.")
+                await MainActor.run {
+                    self.log("❌ sample.mov missing from bundle — drop one into Resources/.")
+                    self.isRunning = false
+                }
             } catch {
-                log("❌ \(error.localizedDescription)")
+                await MainActor.run {
+                    self.log("❌ \(error.localizedDescription)")
+                    self.isRunning = false
+                }
             }
-            self.isRunning = false
         }
     }
 
