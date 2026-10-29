@@ -44,7 +44,7 @@ struct ContentView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("\(vm.fdCount)")
                     .font(.system(size: 56, weight: .bold, design: .rounded))
-                    .foregroundStyle(vm.fdCount > vm.initialFD ? .red : .primary)
+                    .foregroundStyle(vm.fdCount > vm.initialFD ? Color.red : Color.primary)
                     .contentTransition(.numericText())
                 
                 Spacer()
@@ -52,7 +52,7 @@ struct ContentView: View {
                 VStack(alignment: .trailing, spacing: 6) {
                     Text("Baseline: \(vm.initialFD)")
                     Text("Delta: +\(max(0, vm.fdCount - vm.initialFD))")
-                        .foregroundStyle(vm.fdCount > vm.initialFD ? .red : .green)
+                        .foregroundStyle(vm.fdCount > vm.initialFD ? Color.red : Color.green)
                 }
                 .font(.caption.weight(.medium))
                 .foregroundStyle(.secondary)
@@ -74,7 +74,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(vm.isRunning ? Color.gray.opacity(0.3) : Color.orange)
-            .foregroundStyle(vm.isRunning ? .secondary : .black)
+            .foregroundStyle(vm.isRunning ? Color.secondary : Color.black)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .disabled(vm.isRunning)
@@ -90,7 +90,7 @@ struct ContentView: View {
                 Spacer()
                 Button("Clear") { vm.clearLogs() }
                     .font(.footnote.weight(.medium))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.red)
             }
             
             LogView(entries: vm.logs)
