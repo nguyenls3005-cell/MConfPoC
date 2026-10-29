@@ -9,6 +9,7 @@ final class CoreMediaPoC {
 
     enum PoCError: Error {
         case noSampleFile
+        case readerFailed
     }
 
     private let bundleAssetName: String
@@ -20,11 +21,17 @@ final class CoreMediaPoC {
     }
 
     /// Number of currently open file descriptors for this process.
+    /// Uses fcntl instead of /dev/fd because iOS sandbox blocks directory listing.
     static func openFDCount() -> Int {
-        (try? FileManager.default.contentsOfDirectory(atPath: "/dev/fd").count) ?? -1
+        var count = 0
+        for fd in 0..<1024 {
+            if fcntl(Int32(fd), F_GETFD) != -1 {
+                count += 1
+            }
+        }
+        return count
     }
 
-    /// Loads the bundled sample into a temp path so CoreMedia can mmap it.
     private func materializeAsset() throws -> URL {
         guard let url = Bundle.main.url(forResource: bundleAssetName, withExtension: bundleAssetExtension) else {
             throw PoCError.noSampleFile
@@ -36,33 +43,32 @@ final class CoreMediaPoC {
         return tmp
     }
 
-    /// Single iteration: open asset, walk tracks, build a reader,
-    /// drop references without an explicit teardown, then unlink.
     private func iterate(assetURL: URL) async throws {
         let asset = AVURLAsset(url: assetURL, options: [
             AVURLAssetPreferPreciseDurationAndTimingKey: true
         ])
 
-        _ = try await asset.load(.tracks)
-        _ = try await asset.load(.duration)
-
+        // Safely load tracks using the modern async API
+        let tracks = try await asset.load(.tracks)
         let reader = try AVAssetReader(asset: asset)
-        for track in asset.tracks {
+        
+        for track in tracks {
             guard track.mediaType == .video || track.mediaType == .audio else { continue }
-            let output = AVAssetReaderTrackOutput(
-                track: track,
-                outputSettings: [
-                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-                ]
-            )
+            // nil settings means passthrough, avoiding pixel buffer format crashes
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
             if reader.canAdd(output) { reader.add(output) }
         }
-        reader.startReading()
+        
+        guard reader.startReading() else {
+            throw PoCError.readerFailed
+        }
 
-        // Drain a few buffers to force CoreMedia to touch its internal FDs.
+        // Drain buffers safely without hanging forever
         if let first = reader.outputs.first as? AVAssetReaderTrackOutput {
-            for _ in 0..<8 {
-                _ = first.copyNextSampleBuffer()
+            var safety = 0
+            while reader.status == .reading && safety < 16 {
+                if first.copyNextSampleBuffer() == nil { break }
+                safety += 1
             }
         }
 
@@ -70,9 +76,8 @@ final class CoreMediaPoC {
         try? FileManager.default.removeItem(at: assetURL)
     }
 
-    /// Runs `iterations` cycles and reports FD delta.
     func run(iterations: Int,
-             onProgress: @escaping (Int, Int) -> Void) async throws -> (baseline: Int, final: Int) {
+             onProgress: @escaping @Sendable (Int, Int) -> Void) async throws -> (baseline: Int, final: Int) {
         let baseline = Self.openFDCount()
         for i in 0..<iterations {
             let url = try materializeAsset()
